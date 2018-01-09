@@ -1,0 +1,166 @@
+//--------------------------------CREATE TABLE STATEMENT-------------------------------------------
+CREATE DATABASE DB_G77;
+USE DB_G77;
+CREATE TABLE IF NOT EXISTS CityState(
+City VARCHAR(100) NOT NULL, 
+State VARCHAR(100) NOT NULL, 
+PRIMARY KEY(City,State) 
+)ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS DataType(
+DataType ENUM('Mold', 'Air Quality') NOT NULL, 
+PRIMARY KEY(DataType)
+)ENGINE=InnoDB;
+
+
+CREATE TABLE IF NOT EXISTS User(
+Username VARCHAR(100) NOT NULL, 
+Email VARCHAR(100) NOT NULL, 
+Password VARCHAR(100) NOT NULL,
+UserType ENUM('City Official', 'Administrator', 'City Scientist') NOT NULL,
+PRIMARY KEY(Username),
+UNIQUE(Email),
+CHECK(Password>8)
+)ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS CityOfficial(
+Username VARCHAR(100) NOT NULL,
+Title VARCHAR(30),
+Approved BOOLEAN DEFAULT NULL,
+City VARCHAR(100),
+State VARCHAR(100),
+PRIMARY KEY(Username),
+FOREIGN KEY(City, State) REFERENCES CityState(City, State)
+ON DELETE SET NULL ON UPDATE CASCADE, 
+FOREIGN KEY(Username) REFERENCES User(Username)
+ON DELETE CASCADE ON UPDATE CASCADE, 
+CHECK(Password >8)
+)ENGINE=InnoDB;
+
+
+CREATE TABLE IF NOT EXISTS POI(
+LocName VARCHAR(100) NOT NULL, 
+Flag BOOLEAN DEFAULT NULL, 
+DateFlagged DATE,
+ZipCode VARCHAR(5) NOT NULL,
+City VARCHAR(100) NOT NULL,
+State VARCHAR(100) NOT NULL,
+PRIMARY KEY(LocName),
+FOREIGN KEY(City,State) REFERENCES CityState(City,State)
+ON DELETE CASCADE ON UPDATE CASCADE, 
+CHECK(ZipCode =5)
+)ENGINE=InnoDB;
+
+
+CREATE TABLE IF NOT EXISTS DataPoint(
+LocationName VARCHAR(100) NOT NULL,
+DateRecorded TIMESTAMP NOT NULL,
+Accepted BOOLEAN DEFAULT NULL,
+DataValue INT NOT NULL,
+DataType ENUM('Mold', 'Air Quality') NOT NULL,
+PRIMARY KEY(LocationName, DateRecorded),
+FOREIGN KEY(LocationName) REFERENCES POI(LocName)
+ON DELETE CASCADE ON UPDATE CASCADE, 
+FOREIGN KEY(DataType) REFERENCES DataType(DataType)
+ON DELETE CASCADE ON UPDATE CASCADE
+)ENGINE=InnoDB;
+
+//-----------------------------------------LOGIN---------------------------------------------------
+
+//login with an administrator's account.
+SELECT * FROM User WHERE Username = 'admin'; 
+SELECT * FROM CityOfficial WHERE Username = 'official1' AND Approved IS TRUE;
+
+//-----------------------------------------REGISTER---------------------------------------------------
+
+//Register_User:
+//test if a given name or an email address existed, if not, register a city scientist account with it.
+SELECT * FROM User WHERE Username= 'test_scientist' OR Email = 'test_scientist@gmail.com';	
+INSERT INTO User VALUES('test_scientist','test_scientist@gmail.com','111111111','City Scientist');
+
+
+//Register_Cityofficial:
+//test if given information for a city official account existed, if not, register a city official account with it.
+SELECT * FROM User WHERE Username = 'test_official' OR Email ='test_official@gmail.com';
+INSERT INTO User VALUES ('test_official','test_official@gmail.com','111111111','City Official');
+INSERT INTO CityOfficial(Username,Title,City,State) VALUES ('test_official','mayor','Atlanta','Georgia');
+
+//-----------------------------------------ADD DATA POINT---------------------------------------------------
+
+//Add_DataPoint
+SELECT LocName FROM POI;
+SELECT * FROM DataPoint WHERE LocationName= 'Georgia Tech' AND DateRecorded='2017-04-23 16:30';
+INSERT INTO DataPoint (LocationName, DateRecorded, DataValue, DataType) values('Georgia Tech','2017-04-23 16:30','56','Air Quality');
+
+//-------------------------------------ADD POI LOCATION-------------------------------------------------------
+
+//Add_POI_location
+//test if given information for a POI existed, if not, add a POI with it.
+SELECT * FROM POI WHERE LocName= 'The Coca-Cola Company';
+INSERT INTO POI (LocName,ZipCode,City,State) VALUES ('The Coca-Cola Company','30313','Atlanta','Georgia');
+
+
+//----------------------------------PENDING DATA POINT-------------------------------------------------------
+
+//Pending_DataPoint
+SELECT * FROM DataPoint WHERE Accepted IS NULL;
+
+//accept_Datapoint
+UPDATE DataPoint SET Accepted=TRUE WHERE LocationName = 'Georgia Tech' AND DateRecorded = '2017-04-23 16:30';
+
+//reject_Datapoint
+UPDATE DataPoint SET Accepted=FALSE WHERE LocationName = 'Georgia Tech' AND DateRecorded = '2017-02-01 03:57';
+
+
+
+//-------------------------------PENDING CITY OFFICIAL----------------------------------------------
+
+
+//Pending_CityOfficial
+SELECT * FROM (CityOfficial as CO join User as UR) where CO.Username = UR.Username AND Approved IS NULL;
+
+//accept_CityOfficial
+UPDATE CityOfficial SET Approved=TRUE WHERE Username = 'official10';
+
+
+//reject_CityOfficial
+UPDATE CityOfficial SET Approved=FALSE WHERE Username = 'official13';
+
+
+
+
+//-----------------------------------------VIEW POI---------------------------------------------------
+
+
+
+//Get_POI_names
+SELECT LocName FROM POI;
+
+//View_POIs
+//filter POI with certain indicated information, in this example, the constraints are:  (DateFlagged BETWEEN '2016-08-24' AND '2017-02-27') and (Flag = true)
+SELECT LocName, City, State, ZipCode, Flag, DateFlagged FROM POI WHERE (LocName IS NULL OR NULL IS NULL) AND (City IS NULL OR NULL IS NULL) AND (State IS NULL OR NULL IS NULL) AND (ZipCode IS NULL OR NULL IS NULL) AND (DateFlagged BETWEEN '2016-08-24' AND '2017-02-27' )  AND (Flag = true);
+
+
+//----------------------------------------VIEW POI DETAIL----------------------------------------------------
+
+
+//POI_detail
+SELECT DataType, DataValue, DateRecorded FROM DataPoint WHERE (DataType = 'Mold' OR 'Mold' IS NULL) AND (DataValue BETWEEN 50 AND 140) AND (DateRecorded BETWEEN '2016-08-24' AND '2017-02-27');
+
+//FlagToggle
+//already flagged
+SELECT * FROM POI WHERE LocName = 'Georgia Tech';
+UPDATE POI SET Flag = false WHERE LocName = 'Georgia Tech';
+UPDATE POI SET DateFlagged = NULL WHERE LocName = 'Georgia Tech';
+
+//to be flagged
+SELECT * FROM POI WHERE LocName = 'Emory';
+UPDATE POI SET Flag = true WHERE LocName = 'Emory';
+UPDATE POI SET DateFlagged = '2017-04-24' WHERE LocName = 'Emory';
+
+
+//---------------------------------------POI REPORT-----------------------------------------------------
+
+
+//POI_Report_View
+SELECT AA.LocName, AA.City, AA.State, AA.MIN_Mold, AA.AVG_Mold, AA.MAX_Mold, BB.MIN_AQ, BB.AVG_AQ, BB.MAX_AQ, AA.NO_DataPoints_Mold+BB.NO_DataPoints_AQ as NO_DataPoints, AA.Flag from (SELECT * from ((SELECT LocName, City, State, MIN(DataValue) as MIN_Mold, AVG(DataValue) as AVG_Mold, MAX(DataValue) as MAX_Mold, count(*) as NO_DataPoints_Mold, Flag, DataType from (POI as POI01 join DataPoint) WHERE LocName = LocationName AND DataType = 'Mold' AND Accepted = true Group by LocName, DataType) as AA0) WHERE DataType = 'Mold') as AA join (SELECT * from ((SELECT LocName as LocName_AQ, MIN(DataValue) as MIN_AQ, AVG(DataValue) as AVG_AQ, MAX(DataValue) as MAX_AQ, count(*) as NO_DataPoints_AQ, DataType from (POI as POI02 join DataPoint) WHERE LocName = LocationName AND DataType = 'Air Quality' AND Accepted = true Group by LocName, DataType) as BB0) where DataType = 'Air Quality') as BB WHERE AA.LocName = BB.LocName_AQ;
